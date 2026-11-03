@@ -17,7 +17,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      # The GitHub runner already has the Android SDK installed (ANDROID_HOME).
       - name: Build release APK
         run: chmod +x gradlew && ./gradlew assembleRelease --no-daemon
       - name: Rename APK
