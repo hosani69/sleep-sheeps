@@ -1,6 +1,6 @@
 # Sleep Sheeps for Android
 
-A landscape, full-screen Android app. Ten sheep jump the fence under a starry sky and the glowing moon counts them up to 999. It works offline, keeps the screen on, remembers the count, and the Exit button closes the app.
+A landscape, full-screen 3D Android app. Ten sheep in hats from around the world jump the fence under a starry sky and the glowing moon counts them up to 999. It works offline, keeps the screen on, remembers the count, and the Exit button closes the app.
 
 ## Build the APK in Android Studio
 1. Install Android Studio (free) and open this folder with **File > Open**.
