@@ -38,8 +38,8 @@
     top: calc(env(safe-area-inset-top, 0px) + 14px);
     left: calc(env(safe-area-inset-left, 0px) + 14px);
     z-index: 5;
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 9px 14px 9px 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; padding: 0;
     border-radius: 999px;
     border: 1px solid var(--glass-edge);
     background: var(--glass);
@@ -54,7 +54,28 @@
   .exit:hover { background: rgba(255,255,255,0.18); }
   .exit:active { transform: scale(0.96); }
   .exit:focus-visible { outline: 2px solid var(--moon); outline-offset: 3px; }
-  .exit svg { width: 18px; height: 18px; }
+  .exit svg { width: 20px; height: 20px; }
+
+  .style-switch {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 14px);
+    right: calc(env(safe-area-inset-right, 0px) + 14px);
+    z-index: 5;
+    display: inline-flex; padding: 3px; gap: 2px;
+    border-radius: 999px;
+    border: 1px solid var(--glass-edge);
+    background: var(--glass);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .style-switch button {
+    min-width: 44px; height: 36px; padding: 0 12px;
+    border: 0; border-radius: 999px; cursor: pointer;
+    background: transparent; color: var(--wool); opacity: .7;
+    font: 600 15px/1 var(--font-round); letter-spacing: 0.04em;
+  }
+  .style-switch button[aria-pressed="true"] { background: var(--moon); color: var(--ink); opacity: 1; }
+  .style-switch button:focus-visible { outline: 2px solid var(--moon); outline-offset: 2px; }
 
   .rotate {
     position: fixed; left: 50%; transform: translateX(-50%);
@@ -90,12 +111,16 @@
 </style>
 
 </head><body>
-<canvas id="sky" aria-label="Sheep jumping over a fence under a starry sky. The moon shows how many have jumped."></canvas>
+<canvas id="sky" aria-label="Sheep jumping over a fence under a starry sky. The moon shows how many have jumped. Double-tap the moon to reset the count."></canvas>
 
 <button class="exit" id="exit" type="button" aria-label="Exit app">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
-  Exit
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
 </button>
+
+<div class="style-switch" role="group" aria-label="Art style">
+  <button type="button" id="mode-2d" aria-pressed="false">2D</button>
+  <button type="button" id="mode-3d" aria-pressed="true">3D</button>
+</div>
 
 <div class="rotate" id="rotate">Turn your phone sideways for the full meadow</div>
 
@@ -119,7 +144,9 @@
   let pts = [], cum = [], L = 1, Sj = 0, Jl = 0;
   let stars = [], shooters = [];
   let count = 0, moonPop = 0, lastJump = -99, clock = 0;
-  let celebrate = 0;
+  let celebrate = 0, resetFlash = 0;
+  let is3D = true;
+  try { if (localStorage.getItem('sleepsheeps.style') === '2d') is3D = false; } catch (e) {}
 
   try { const c = parseInt(localStorage.getItem('sleepsheeps.count'), 10); if (c >= 0 && c <= MAX_COUNT) count = c; } catch (e) {}
   const saveCount = () => { try { localStorage.setItem('sleepsheeps.count', String(count)); } catch (e) {} };
@@ -249,41 +276,71 @@
   }
 
   // ---------- drawing ----------
-  function drawSky(t) {
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, '#04071a');
-    g.addColorStop(0.55, '#0d1638');
-    g.addColorStop(1, '#1b2a57');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
+  // Two art styles: 3D (lit, shaded volumes) and 2D (flat colours, no gradients).
+  const moonGeom = { cx: 0, cy: 0, R: 1 };
+  const LIGHT = { x: -0.45, y: -0.6 }; // light direction for 3D shading, from the moon above
 
-    // faint milky band
-    ctx.save();
-    ctx.translate(W * 0.5, H * 0.35);
-    ctx.rotate(-0.35);
-    const mg = ctx.createLinearGradient(0, -H * 0.18, 0, H * 0.18);
-    mg.addColorStop(0, 'rgba(150,160,255,0)');
-    mg.addColorStop(0.5, 'rgba(150,170,255,0.07)');
-    mg.addColorStop(1, 'rgba(150,160,255,0)');
-    ctx.fillStyle = mg;
-    ctx.fillRect(-W, -H * 0.18, W * 2, H * 0.36);
-    ctx.restore();
+  function drawSky(t) {
+    if (is3D) {
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, '#04071a');
+      g.addColorStop(0.55, '#0d1638');
+      g.addColorStop(1, '#1b2a57');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+      ctx.save();
+      ctx.translate(W * 0.5, H * 0.35);
+      ctx.rotate(-0.35);
+      const mg = ctx.createLinearGradient(0, -H * 0.18, 0, H * 0.18);
+      mg.addColorStop(0, 'rgba(150,160,255,0)');
+      mg.addColorStop(0.5, 'rgba(150,170,255,0.08)');
+      mg.addColorStop(1, 'rgba(150,160,255,0)');
+      ctx.fillStyle = mg;
+      ctx.fillRect(-W, -H * 0.18, W * 2, H * 0.36);
+      ctx.restore();
+    } else {
+      // flat bands of night
+      const bands = ['#070b22', '#0b1230', '#101a3e', '#16224d'];
+      bands.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(0, H * i / bands.length * 0.8, W, H); });
+    }
 
     for (const s of stars) {
       const tw = 0.55 + 0.45 * Math.sin(t * s.sp + s.ph);
-      const a = s.a * tw;
-      ctx.fillStyle = s.hue + a.toFixed(3) + ')';
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-      ctx.fill();
-      if (s.r > 1.35) {
-        ctx.strokeStyle = s.hue + (a * 0.55).toFixed(3) + ')';
-        ctx.lineWidth = 0.8;
-        const k = s.r * 3.2 * tw;
-        ctx.beginPath();
-        ctx.moveTo(s.x - k, s.y); ctx.lineTo(s.x + k, s.y);
-        ctx.moveTo(s.x, s.y - k); ctx.lineTo(s.x, s.y + k);
-        ctx.stroke();
+      if (is3D) {
+        // depth: far stars are small and dim, near stars drift a touch and glow
+        const a = s.a * tw;
+        const x = (s.x + t * s.r * 0.6) % W;
+        if (s.r > 1.1) {
+          const gl = ctx.createRadialGradient(x, s.y, 0, x, s.y, s.r * 4);
+          gl.addColorStop(0, s.hue + (a * 0.5).toFixed(3) + ')');
+          gl.addColorStop(1, s.hue + '0)');
+          ctx.fillStyle = gl;
+          ctx.beginPath(); ctx.arc(x, s.y, s.r * 4, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.fillStyle = s.hue + a.toFixed(3) + ')';
+        ctx.beginPath(); ctx.arc(x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
+        if (s.r > 1.35) {
+          ctx.strokeStyle = s.hue + (a * 0.55).toFixed(3) + ')';
+          ctx.lineWidth = 0.8;
+          const k = s.r * 3.2 * tw;
+          ctx.beginPath();
+          ctx.moveTo(x - k, s.y); ctx.lineTo(x + k, s.y);
+          ctx.moveTo(x, s.y - k); ctx.lineTo(x, s.y + k);
+          ctx.stroke();
+        }
+      } else {
+        // flat: crisp dots, and the big ones are little 4-point star shapes
+        ctx.fillStyle = s.hue + (tw > 0.35 ? s.a : s.a * 0.5).toFixed(3) + ')';
+        if (s.r > 1.35) {
+          const k = s.r * 2.6;
+          ctx.beginPath();
+          ctx.moveTo(s.x, s.y - k); ctx.lineTo(s.x + k * 0.3, s.y - k * 0.3); ctx.lineTo(s.x + k, s.y);
+          ctx.lineTo(s.x + k * 0.3, s.y + k * 0.3); ctx.lineTo(s.x, s.y + k); ctx.lineTo(s.x - k * 0.3, s.y + k * 0.3);
+          ctx.lineTo(s.x - k, s.y); ctx.lineTo(s.x - k * 0.3, s.y - k * 0.3); ctx.closePath(); ctx.fill();
+        } else {
+          const r = Math.max(0.8, s.r);
+          ctx.fillRect(s.x - r, s.y - r, r * 2, r * 2);
+        }
       }
     }
   }
@@ -298,49 +355,85 @@
       const a = Math.sin(Math.PI * k);
       const sp = Math.hypot(s.vx, s.vy);
       const tx = s.x - s.vx / sp * s.len, ty = s.y - s.vy / sp * s.len;
-      const g = ctx.createLinearGradient(s.x, s.y, tx, ty);
-      g.addColorStop(0, `rgba(255,255,255,${a})`);
-      g.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.strokeStyle = g;
-      ctx.lineWidth = 1.6;
       ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(tx, ty); ctx.stroke();
+      if (is3D) {
+        const g = ctx.createLinearGradient(s.x, s.y, tx, ty);
+        g.addColorStop(0, `rgba(255,255,255,${a})`);
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.strokeStyle = g;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(tx, ty); ctx.stroke();
+      } else {
+        ctx.strokeStyle = `rgba(255,244,210,${a})`;
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([s.len * 0.18, s.len * 0.12]);
+        ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(tx, ty); ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
   }
 
   function drawMoon(t, dt) {
     const R = Math.min(H * 0.19, W * 0.13);
     const cx = W * 0.5, cy = Math.max(R + H * 0.06, H * 0.29);
+    moonGeom.cx = cx; moonGeom.cy = cy; moonGeom.R = R;
     moonPop = Math.max(0, moonPop - dt * 2.2);
+    resetFlash = Math.max(0, resetFlash - dt * 1.2);
     const pop = 1 + 0.07 * Math.sin(moonPop * Math.PI) * moonPop;
     const breathe = 1 + 0.03 * Math.sin(t * 0.9);
-    const glow = (1 + moonPop * 0.6 + (celebrate > 0 ? 0.4 : 0)) * breathe;
+    const glow = (1 + moonPop * 0.6 + (celebrate > 0 ? 0.4 : 0) + resetFlash * 0.8) * breathe;
+    const craters = [[-0.5, -0.38, 0.14], [0.45, 0.42, 0.18], [0.55, -0.3, 0.09], [-0.42, 0.5, 0.1], [0.05, -0.68, 0.07], [-0.72, 0.08, 0.07]];
 
-    // outer glow
-    const og = ctx.createRadialGradient(cx, cy, R * 0.8, cx, cy, R * 3.4 * glow);
-    og.addColorStop(0, 'rgba(255,238,180,0.40)');
-    og.addColorStop(0.35, 'rgba(255,225,160,0.12)');
-    og.addColorStop(1, 'rgba(255,220,150,0)');
-    ctx.fillStyle = og;
-    ctx.beginPath(); ctx.arc(cx, cy, R * 3.4 * glow, 0, Math.PI * 2); ctx.fill();
+    if (is3D) {
+      const og = ctx.createRadialGradient(cx, cy, R * 0.8, cx, cy, R * 3.4 * glow);
+      og.addColorStop(0, 'rgba(255,238,180,0.40)');
+      og.addColorStop(0.35, 'rgba(255,225,160,0.12)');
+      og.addColorStop(1, 'rgba(255,220,150,0)');
+      ctx.fillStyle = og;
+      ctx.beginPath(); ctx.arc(cx, cy, R * 3.4 * glow, 0, Math.PI * 2); ctx.fill();
+    } else {
+      // flat glow: soft concentric rings
+      [[2.2, 0.06], [1.75, 0.08], [1.4, 0.11]].forEach(([k, a]) => {
+        ctx.fillStyle = `rgba(255,236,170,${(a * glow).toFixed(3)})`;
+        ctx.beginPath(); ctx.arc(cx, cy, R * k * breathe, 0, Math.PI * 2); ctx.fill();
+      });
+    }
 
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(pop, pop);
-    ctx.shadowColor = 'rgba(255,236,170,0.9)';
-    ctx.shadowBlur = R * 0.6 * glow;
-    const mg = ctx.createRadialGradient(-R * 0.3, -R * 0.35, R * 0.1, 0, 0, R);
-    mg.addColorStop(0, '#fffbe9');
-    mg.addColorStop(0.7, '#fff1c8');
-    mg.addColorStop(1, '#f4dfa4');
-    ctx.fillStyle = mg;
-    ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // craters
-    ctx.fillStyle = 'rgba(214,190,130,0.28)';
-    for (const [x, y, r] of [[-0.5, -0.38, 0.14], [0.45, 0.42, 0.18], [0.55, -0.3, 0.09], [-0.42, 0.5, 0.1], [0.05, -0.68, 0.07], [-0.72, 0.08, 0.07]]) {
-      ctx.beginPath(); ctx.arc(x * R, y * R, r * R, 0, Math.PI * 2); ctx.fill();
+    if (is3D) {
+      ctx.shadowColor = 'rgba(255,236,170,0.9)';
+      ctx.shadowBlur = R * 0.6 * glow;
+      // lit sphere: bright upper-left, darker limb
+      const mg = ctx.createRadialGradient(-R * 0.35, -R * 0.4, R * 0.05, 0, 0, R);
+      mg.addColorStop(0, '#fffdf2');
+      mg.addColorStop(0.55, '#fff0c4');
+      mg.addColorStop(0.9, '#ecd292');
+      mg.addColorStop(1, '#d9bb76');
+      ctx.fillStyle = mg;
+      ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      // craters with an inner shadow and a lit rim
+      ctx.save();
+      ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.clip();
+      for (const [x, y, r] of craters) {
+        const X = x * R, Y = y * R, rr = r * R;
+        const cg = ctx.createRadialGradient(X - rr * 0.35, Y - rr * 0.35, rr * 0.1, X, Y, rr);
+        cg.addColorStop(0, 'rgba(170,140,80,0.45)');
+        cg.addColorStop(1, 'rgba(210,185,125,0.18)');
+        ctx.fillStyle = cg;
+        ctx.beginPath(); ctx.arc(X, Y, rr, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,240,0.55)';
+        ctx.lineWidth = Math.max(1, rr * 0.14);
+        ctx.beginPath(); ctx.arc(X, Y, rr * 0.92, 0.1 * Math.PI, 0.9 * Math.PI); ctx.stroke();
+      }
+      ctx.restore();
+    } else {
+      ctx.fillStyle = '#fff1c8';
+      ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#f2dea3';
+      for (const [x, y, r] of craters) { ctx.beginPath(); ctx.arc(x * R, y * R, r * R, 0, Math.PI * 2); ctx.fill(); }
     }
 
     // the count
@@ -349,69 +442,101 @@
     ctx.font = `600 ${fs}px Fredoka, ui-rounded, system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(255,255,255,0.95)';
-    ctx.shadowBlur = R * 0.18;
-    ctx.fillStyle = '#2f3768';
-    const np = 1 + moonPop * 0.18;
+    const np = 1 + moonPop * 0.18 + resetFlash * 0.25;
     ctx.save();
     ctx.scale(np, np);
-    ctx.fillText(txt, 0, fs * 0.04);
+    if (is3D) {
+      // engraved look: light lip below, glow around
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fillText(txt, fs * 0.02, fs * 0.07);
+      ctx.shadowColor = 'rgba(255,255,255,0.95)';
+      ctx.shadowBlur = R * 0.18;
+      ctx.fillStyle = '#2f3768';
+      ctx.fillText(txt, 0, fs * 0.04);
+    } else {
+      ctx.fillStyle = '#2f3768';
+      ctx.fillText(txt, 0, fs * 0.04);
+    }
     ctx.restore();
     ctx.restore();
+
+  }
+
+  function drawResetLabel() {
+    if (resetFlash <= 0) return;
+    const { cx, cy, R } = moonGeom;
+    const fs = Math.max(14, R * 0.2);
+    ctx.font = `500 ${fs}px Fredoka, ui-rounded, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const a = Math.min(1, resetFlash * 1.5);
+    const w = ctx.measureText('Counter reset').width + fs * 1.4;
+    ctx.fillStyle = `rgba(7,11,31,${(a * 0.6).toFixed(3)})`;
+    ctx.beginPath(); ctx.roundRect(cx - w / 2, cy - R - fs * 2.2, w, fs * 1.7, fs * 0.85); ctx.fill();
+    ctx.fillStyle = `rgba(255,244,210,${a.toFixed(3)})`;
+    ctx.fillText('Counter reset', cx, cy - R - fs * 1.35);
+  }
+
+  function groundLine(base, amp, freq, phase) {
+    return x => base - amp - Math.sin(x / W * freq + phase) * amp * 0.5;
+  }
+
+  function fillHill(fn, col) {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    for (let x = 0; x <= W + W / 40; x += W / 40) ctx.lineTo(x, fn(x));
+    ctx.lineTo(W, H);
+    ctx.closePath();
+    ctx.fill();
   }
 
   function drawLand(t) {
-    // distant hills
-    ctx.fillStyle = '#121c40';
-    ctx.beginPath();
-    ctx.moveTo(0, H);
-    ctx.lineTo(0, by - H * 0.06);
-    for (let x = 0; x <= W; x += W / 40) ctx.lineTo(x, by - H * 0.075 - Math.sin(x / W * 5.2 + 1) * H * 0.03 - Math.sin(x / W * 11) * H * 0.01);
-    ctx.lineTo(W, H);
-    ctx.fill();
+    const far = x => by - H * 0.075 - Math.sin(x / W * 5.2 + 1) * H * 0.03 - Math.sin(x / W * 11) * H * 0.01;
+    const back = x => by - H * 0.02 - Math.sin(x / W * 3.1) * H * 0.012;
+    const front = x => gy - H * 0.035 - Math.sin(x / W * 4 + 2) * H * 0.01;
 
-    // back meadow (return lane)
-    const bg = ctx.createLinearGradient(0, by - H * 0.05, 0, H);
-    bg.addColorStop(0, '#1d3650');
-    bg.addColorStop(1, '#0f2036');
-    ctx.fillStyle = bg;
-    ctx.beginPath();
-    ctx.moveTo(0, H);
-    ctx.lineTo(0, by - H * 0.025);
-    for (let x = 0; x <= W; x += W / 30) ctx.lineTo(x, by - H * 0.02 - Math.sin(x / W * 3.1) * H * 0.012);
-    ctx.lineTo(W, H);
-    ctx.fill();
-
-    // front meadow
-    const fg = ctx.createLinearGradient(0, gy - H * 0.05, 0, H);
-    fg.addColorStop(0, '#24465a');
-    fg.addColorStop(1, '#122638');
-    ctx.fillStyle = fg;
-    ctx.beginPath();
-    ctx.moveTo(0, H);
-    ctx.lineTo(0, gy - H * 0.04);
-    for (let x = 0; x <= W; x += W / 30) ctx.lineTo(x, gy - H * 0.035 - Math.sin(x / W * 4 + 2) * H * 0.01);
-    ctx.lineTo(W, H);
-    ctx.fill();
-
-    // moonlit rim on the front meadow
-    ctx.strokeStyle = 'rgba(190,220,255,0.10)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    for (let x = 0; x <= W; x += W / 30) { const y = gy - H * 0.035 - Math.sin(x / W * 4 + 2) * H * 0.01; x ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
-    ctx.stroke();
-
-    // grass tufts
-    ctx.strokeStyle = 'rgba(120,170,190,0.25)';
-    ctx.lineWidth = 1.2;
-    for (let i = 0; i < 40; i++) {
-      const x = ((i * 97.13) % 1) * W + (i * 37) % W;
-      const xx = (x % W), yy = gy + H * 0.04 + ((i * 53) % 100) / 100 * H * 0.1;
-      const sw = Math.sin(t * 1.3 + i) * 1.5;
-      ctx.beginPath();
-      ctx.moveTo(xx, yy); ctx.quadraticCurveTo(xx - 2, yy - 6, xx - 3 + sw, yy - 10);
-      ctx.moveTo(xx, yy); ctx.quadraticCurveTo(xx + 1, yy - 7, xx + 2 + sw, yy - 12);
-      ctx.stroke();
+    if (is3D) {
+      const fg0 = ctx.createLinearGradient(0, by - H * 0.12, 0, by + H * 0.05);
+      fg0.addColorStop(0, '#18244d'); fg0.addColorStop(1, '#0e1636');
+      fillHill(far, fg0);
+      const bg = ctx.createLinearGradient(0, by - H * 0.05, 0, H);
+      bg.addColorStop(0, '#24405c'); bg.addColorStop(0.4, '#1a3149'); bg.addColorStop(1, '#0c1a2c');
+      fillHill(back, bg);
+      // moonlight on the crest of the back meadow
+      ctx.strokeStyle = 'rgba(200,225,255,0.13)'; ctx.lineWidth = 3;
+      ctx.beginPath(); for (let x = 0; x <= W; x += W / 30) x ? ctx.lineTo(x, back(x)) : ctx.moveTo(x, back(x)); ctx.stroke();
+      const fgd = ctx.createLinearGradient(0, gy - H * 0.05, 0, H);
+      fgd.addColorStop(0, '#2b5168'); fgd.addColorStop(0.35, '#1d3a50'); fgd.addColorStop(1, '#0d1d2d');
+      fillHill(front, fgd);
+      ctx.strokeStyle = 'rgba(200,230,255,0.16)'; ctx.lineWidth = 2;
+      ctx.beginPath(); for (let x = 0; x <= W; x += W / 30) x ? ctx.lineTo(x, front(x)) : ctx.moveTo(x, front(x)); ctx.stroke();
+      // grass blades with depth: smaller and dimmer further back
+      for (let i = 0; i < 46; i++) {
+        const xx = ((i * 0.6180339 * W * 1.7) % W);
+        const d = ((i * 53) % 100) / 100;
+        const yy = gy + H * 0.03 + d * H * 0.13;
+        const s = 0.6 + d * 0.8;
+        const sw = Math.sin(t * 1.3 + i) * 1.5 * s;
+        ctx.strokeStyle = `rgba(130,180,200,${(0.15 + d * 0.25).toFixed(3)})`;
+        ctx.lineWidth = 1 + d;
+        ctx.beginPath();
+        ctx.moveTo(xx, yy); ctx.quadraticCurveTo(xx - 2 * s, yy - 6 * s, xx - 3 * s + sw, yy - 10 * s);
+        ctx.moveTo(xx, yy); ctx.quadraticCurveTo(xx + 1 * s, yy - 7 * s, xx + 2 * s + sw, yy - 12 * s);
+        ctx.stroke();
+      }
+    } else {
+      fillHill(far, '#141e44');
+      fillHill(back, '#1d3550');
+      fillHill(front, '#264a5e');
+      ctx.fillStyle = '#1f3f52';
+      ctx.fillRect(0, gy + H * 0.06, W, H);
+      ctx.fillStyle = '#3b6a7c';
+      for (let i = 0; i < 30; i++) {
+        const xx = ((i * 0.6180339 * W * 1.7) % W);
+        const yy = gy + H * 0.04 + ((i * 53) % 100) / 100 * H * 0.12;
+        ctx.beginPath(); ctx.moveTo(xx - 4, yy); ctx.lineTo(xx - 1, yy - 9); ctx.lineTo(xx + 1, yy); ctx.lineTo(xx + 3, yy - 7); ctx.lineTo(xx + 5, yy); ctx.closePath(); ctx.fill();
+      }
     }
   }
 
@@ -419,32 +544,60 @@
     const w = u * 1.25, h = fenceH;
     const left = fx - w / 2, base = gy + u * 0.12;
     const postW = u * 0.16;
+    const railH = u * 0.13;
     ctx.save();
-    // shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.beginPath(); ctx.ellipse(fx, base, w * 0.65, u * 0.1, 0, 0, Math.PI * 2); ctx.fill();
-    // rails
-    const rail = (y) => {
-      ctx.fillStyle = '#7a6250';
-      ctx.fillRect(left - u * 0.12, y, w + u * 0.24, u * 0.13);
-      ctx.fillStyle = 'rgba(255,240,210,0.18)';
-      ctx.fillRect(left - u * 0.12, y, w + u * 0.24, u * 0.035);
-    };
-    rail(base - h * 0.78);
-    rail(base - h * 0.4);
-    // posts
-    for (const x of [left, fx, left + w]) {
-      ctx.fillStyle = '#6b5444';
-      ctx.beginPath();
-      ctx.moveTo(x - postW / 2, base);
-      ctx.lineTo(x - postW / 2, base - h);
-      ctx.lineTo(x, base - h - postW * 0.6);
-      ctx.lineTo(x + postW / 2, base - h);
-      ctx.lineTo(x + postW / 2, base);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = 'rgba(255,240,210,0.2)';
-      ctx.fillRect(x - postW / 2, base - h, postW * 0.3, h);
+    if (is3D) {
+      const depth = u * 0.12; // extrusion towards the back-right
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath(); ctx.ellipse(fx + depth, base, w * 0.7, u * 0.12, 0, 0, Math.PI * 2); ctx.fill();
+      const rail = (y) => {
+        const x0 = left - u * 0.12, x1 = left + w + u * 0.12;
+        // top face
+        ctx.fillStyle = '#9b8068';
+        ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + depth, y - depth * 0.6); ctx.lineTo(x1 + depth, y - depth * 0.6); ctx.lineTo(x1, y); ctx.closePath(); ctx.fill();
+        // front face
+        const g = ctx.createLinearGradient(0, y, 0, y + railH);
+        g.addColorStop(0, '#866b55'); g.addColorStop(1, '#5c4738');
+        ctx.fillStyle = g;
+        ctx.fillRect(x0, y, x1 - x0, railH);
+        // end face
+        ctx.fillStyle = '#4a392d';
+        ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x1 + depth, y - depth * 0.6); ctx.lineTo(x1 + depth, y - depth * 0.6 + railH); ctx.lineTo(x1, y + railH); ctx.closePath(); ctx.fill();
+      };
+      const post = (x) => {
+        const xl = x - postW / 2, xr = x + postW / 2, top = base - h;
+        // side face
+        ctx.fillStyle = '#463529';
+        ctx.beginPath(); ctx.moveTo(xr, base); ctx.lineTo(xr, top); ctx.lineTo(xr + depth, top - depth * 0.6); ctx.lineTo(xr + depth, base - depth * 0.6); ctx.closePath(); ctx.fill();
+        // front face
+        const g = ctx.createLinearGradient(xl, 0, xr, 0);
+        g.addColorStop(0, '#8e735d'); g.addColorStop(1, '#6a5242');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.moveTo(xl, base); ctx.lineTo(xl, top); ctx.lineTo(x, top - postW * 0.6); ctx.lineTo(xr, top); ctx.lineTo(xr, base); ctx.closePath(); ctx.fill();
+        // pointed cap top face
+        ctx.fillStyle = '#a58a72';
+        ctx.beginPath(); ctx.moveTo(x, top - postW * 0.6); ctx.lineTo(xr, top); ctx.lineTo(xr + depth, top - depth * 0.6); ctx.lineTo(x + depth, top - postW * 0.6 - depth * 0.6); ctx.closePath(); ctx.fill();
+        // wood grain
+        ctx.strokeStyle = 'rgba(40,28,20,0.35)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x - postW * 0.1, top + h * 0.15); ctx.lineTo(x - postW * 0.05, base - h * 0.1); ctx.stroke();
+      };
+      // back rails behind posts? rails are nailed to the front, so draw posts first
+      for (const x of [left, fx, left + w]) post(x);
+      rail(base - h * 0.78);
+      rail(base - h * 0.4);
+    } else {
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.fillRect(fx - w * 0.65, base - u * 0.04, w * 1.3, u * 0.08);
+      for (const x of [left, fx, left + w]) {
+        ctx.fillStyle = '#6b5444';
+        ctx.beginPath();
+        ctx.moveTo(x - postW / 2, base); ctx.lineTo(x - postW / 2, base - h);
+        ctx.lineTo(x, base - h - postW * 0.6); ctx.lineTo(x + postW / 2, base - h); ctx.lineTo(x + postW / 2, base);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.fillStyle = '#7f6653';
+      ctx.fillRect(left - u * 0.12, base - h * 0.78, w + u * 0.24, railH);
+      ctx.fillRect(left - u * 0.12, base - h * 0.4, w + u * 0.24, railH);
     }
     ctx.restore();
   }
@@ -469,6 +622,17 @@
     return { a, len, rot, sx, wink, happy: true };
   }
 
+  // A shaded ball for 3D wool and heads. The light stays fixed in world space,
+  // so it is passed in already converted to the sheep's local frame.
+  function ball(x, y, r, base, lit, dark, lx, ly) {
+    const g = ctx.createRadialGradient(x + lx * r * 0.55, y + ly * r * 0.55, r * 0.08, x, y, r);
+    g.addColorStop(0, lit);
+    g.addColorStop(0.6, base);
+    g.addColorStop(1, dark);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
+
   function drawSheep(sh, t) {
     const p = posAt(sh.s);
     const depth = Math.min(1, Math.max(0, (p.y - by) / (gy - by)));
@@ -485,21 +649,38 @@
     const x = p.x, y = p.y - lift - bob;
 
     // ground shadow
-    ctx.fillStyle = `rgba(0,0,0,${(0.28 * (1 - Math.min(1, lift / jumpH) * 0.6)).toFixed(3)})`;
-    ctx.beginPath();
-    ctx.ellipse(x, p.y + U * 0.02, U * 0.7 * (1 - lift / jumpH * 0.4), U * 0.12, 0, 0, Math.PI * 2);
-    ctx.fill();
+    const sa = 0.28 * (1 - Math.min(1, lift / jumpH) * 0.6);
+    if (is3D) {
+      const sg = ctx.createRadialGradient(x, p.y, 0, x, p.y, U * 0.75);
+      sg.addColorStop(0, `rgba(0,0,0,${(sa * 1.4).toFixed(3)})`);
+      sg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = sg;
+      ctx.save(); ctx.translate(x, p.y + U * 0.02); ctx.scale(1 - lift / jumpH * 0.4, 0.18);
+      ctx.beginPath(); ctx.arc(0, 0, U * 0.75, 0, Math.PI * 2);
+      ctx.restore();
+      ctx.fill();
+    } else {
+      ctx.fillStyle = `rgba(0,0,0,${sa.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.ellipse(x, p.y + U * 0.02, U * 0.7 * (1 - lift / jumpH * 0.4), U * 0.12, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     const P = legAngles(sh, jt);
     ctx.save();
     ctx.translate(x, y);
     ctx.scale(facing * sc, sc);
-    // rotate around the body centre
     const bcY = -u * 0.78;
     ctx.translate(0, bcY);
     ctx.rotate(P.rot);
-    ctx.scale(P.sx, 1);
+    ctx.scale(P.sx || 0.001, 1);
     ctx.translate(0, -bcY);
+
+    // light direction in the sheep's own frame (undo facing flip and body rotation)
+    const cr = Math.cos(-P.rot), sr = Math.sin(-P.rot);
+    let lx = LIGHT.x * facing, ly = LIGHT.y;
+    [lx, ly] = [lx * cr - ly * sr, lx * sr + ly * cr];
+    if (P.sx < 0) lx = -lx;
 
     const legLen = u * 0.46 * P.len;
     const hipY = -u * 0.46;
@@ -507,7 +688,15 @@
       ctx.save();
       ctx.translate(hx, hipY);
       ctx.rotate(ang);
-      ctx.strokeStyle = far ? '#1c2033' : '#2a2f45';
+      if (is3D) {
+        const g = ctx.createLinearGradient(-u * 0.065, 0, u * 0.065, 0);
+        g.addColorStop(0, far ? '#2a2f45' : '#4a5172');
+        g.addColorStop(0.5, far ? '#1c2033' : '#2f3550');
+        g.addColorStop(1, far ? '#101320' : '#1a1e30');
+        ctx.strokeStyle = g;
+      } else {
+        ctx.strokeStyle = far ? '#1c2033' : '#2a2f45';
+      }
       ctx.lineWidth = u * 0.13;
       ctx.lineCap = 'round';
       ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, legLen); ctx.stroke();
@@ -515,25 +704,30 @@
       ctx.beginPath(); ctx.arc(0, legLen, u * 0.075, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     };
-    // far legs first
     leg(-u * 0.32, P.a[1], true);
     leg(u * 0.38, P.a[3], true);
 
+    const woolLit = '#ffffff', woolDark = sh.wool === '#f3e9dc' ? '#b9ab98' : '#a9b0c8';
     // tail
-    ctx.fillStyle = sh.wool;
-    ctx.beginPath(); ctx.arc(-u * 0.68, -u * 0.86, u * 0.14, 0, Math.PI * 2); ctx.fill();
+    if (is3D) ball(-u * 0.68, -u * 0.86, u * 0.14, sh.wool, woolLit, woolDark, lx, ly);
+    else { ctx.fillStyle = sh.wool; ctx.beginPath(); ctx.arc(-u * 0.68, -u * 0.86, u * 0.14, 0, Math.PI * 2); ctx.fill(); }
 
     // fluffy body
     const puffs = [[-0.42, -0.72, 0.3], [-0.18, -0.98, 0.32], [0.18, -1.0, 0.31], [0.42, -0.76, 0.3], [0.12, -0.6, 0.32], [-0.2, -0.6, 0.31], [0, -0.82, 0.38]];
-    ctx.fillStyle = '#c9cfe2';
-    for (const [px, py, r] of puffs) { ctx.beginPath(); ctx.arc(px * u, py * u + u * 0.04, r * u, 0, Math.PI * 2); ctx.fill(); }
-    ctx.fillStyle = sh.wool;
-    for (const [px, py, r] of puffs) { ctx.beginPath(); ctx.arc(px * u, py * u, r * u * 0.96, 0, Math.PI * 2); ctx.fill(); }
-    // moonlight highlight
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.beginPath(); ctx.arc(-u * 0.1, -u * 1.08, u * 0.14, 0, Math.PI * 2); ctx.fill();
+    if (is3D) {
+      // soft contact shadow under the fleece, then each puff as a lit ball
+      ctx.fillStyle = 'rgba(10,14,30,0.35)';
+      ctx.beginPath(); ctx.ellipse(0, -u * 0.5, u * 0.62, u * 0.16, 0, 0, Math.PI * 2); ctx.fill();
+      for (const [px, py, r] of puffs) ball(px * u, py * u, r * u, sh.wool, woolLit, woolDark, lx, ly);
+    } else {
+      ctx.fillStyle = sh.wool;
+      for (const [px, py, r] of puffs) { ctx.beginPath(); ctx.arc(px * u, py * u, r * u * 0.96, 0, Math.PI * 2); ctx.fill(); }
+      // one flat curl line for texture
+      ctx.strokeStyle = 'rgba(160,168,196,0.6)'; ctx.lineWidth = u * 0.03; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(-u * 0.12, -u * 0.72, u * 0.12, 0.2, Math.PI - 0.2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(u * 0.2, -u * 0.8, u * 0.1, 0.2, Math.PI - 0.2); ctx.stroke();
+    }
 
-    // near legs
     leg(-u * 0.22, P.a[0], false);
     leg(u * 0.48, P.a[2], false);
 
@@ -542,27 +736,30 @@
     ctx.save();
     ctx.translate(hx, hy);
     ctx.rotate(jt == null ? 0.15 : -0.1);
-    // ears
     ctx.fillStyle = '#2a2f45';
     ctx.save(); ctx.translate(-u * 0.12, -u * 0.12); ctx.rotate(-0.9 + (jt != null ? -0.5 * Math.sin(Math.PI * jt) : 0));
     ctx.beginPath(); ctx.ellipse(-u * 0.1, 0, u * 0.13, u * 0.055, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-    ctx.fillStyle = '#353b56';
-    ctx.beginPath(); ctx.ellipse(0, 0, u * 0.22, u * 0.19, 0.25, 0, Math.PI * 2); ctx.fill();
-    // muzzle
-    ctx.beginPath(); ctx.ellipse(u * 0.14, u * 0.05, u * 0.12, u * 0.1, 0, 0, Math.PI * 2); ctx.fill();
-    // wool tuft
-    ctx.fillStyle = sh.wool;
-    ctx.beginPath(); ctx.arc(-u * 0.04, -u * 0.17, u * 0.1, 0, Math.PI * 2); ctx.arc(u * 0.07, -u * 0.18, u * 0.08, 0, Math.PI * 2); ctx.fill();
-    // eye
+    if (is3D) {
+      ctx.save(); ctx.rotate(0.25); ctx.scale(1, 0.86);
+      ball(0, 0, u * 0.22, '#353b56', '#5d6690', '#1a1e30', lx, ly);
+      ctx.restore();
+      ball(u * 0.14, u * 0.05, u * 0.115, '#383e5a', '#5a6389', '#1d2134', lx, ly);
+      ball(-u * 0.04, -u * 0.17, u * 0.1, sh.wool, woolLit, woolDark, lx, ly);
+      ball(u * 0.07, -u * 0.18, u * 0.08, sh.wool, woolLit, woolDark, lx, ly);
+    } else {
+      ctx.fillStyle = '#353b56';
+      ctx.beginPath(); ctx.ellipse(0, 0, u * 0.22, u * 0.19, 0.25, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(u * 0.14, u * 0.05, u * 0.12, u * 0.1, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = sh.wool;
+      ctx.beginPath(); ctx.arc(-u * 0.04, -u * 0.17, u * 0.1, 0, Math.PI * 2); ctx.arc(u * 0.07, -u * 0.18, u * 0.08, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.strokeStyle = '#ffffff'; ctx.fillStyle = '#ffffff';
     ctx.lineWidth = u * 0.035; ctx.lineCap = 'round';
     if (P.happy) {
-      // ^ shaped happy eye, or a wink line
       ctx.beginPath();
       if (P.wink) { ctx.moveTo(u * 0.02, -u * 0.01); ctx.lineTo(u * 0.12, -u * 0.01); }
       else { ctx.moveTo(u * 0.01, 0); ctx.lineTo(u * 0.065, -u * 0.06); ctx.lineTo(u * 0.12, 0); }
       ctx.stroke();
-      // open smile
       ctx.fillStyle = '#f19aa8';
       ctx.beginPath(); ctx.arc(u * 0.2, u * 0.08, u * 0.045, 0, Math.PI); ctx.fill();
     } else {
@@ -572,9 +769,9 @@
         ctx.beginPath(); ctx.arc(u * 0.07, -u * 0.02, u * 0.045, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#12141f';
         ctx.beginPath(); ctx.arc(u * 0.085, -u * 0.02, u * 0.022, 0, Math.PI * 2); ctx.fill();
+        if (is3D) { ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(u * 0.078, -u * 0.032, u * 0.008, 0, Math.PI * 2); ctx.fill(); }
       }
     }
-    // cheek
     ctx.fillStyle = 'rgba(241,154,168,0.35)';
     ctx.beginPath(); ctx.arc(u * 0.02, u * 0.07, u * 0.04, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
@@ -595,6 +792,7 @@
     // the jumper is drawn last so it flies over its queue-mates
     front.sort((a, b) => (a.sh.pose ? 1 : 0) - (b.sh.pose ? 1 : 0));
     for (const o of front) drawSheep(o.sh, t);
+    drawResetLabel();
   }
 
   // ---------- loop ----------
@@ -635,6 +833,35 @@
   }
   keepAwake();
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && running) keepAwake(); });
+
+  // ---------- art style ----------
+  const b2 = document.getElementById('mode-2d'), b3 = document.getElementById('mode-3d');
+  function setStyle(three) {
+    is3D = three;
+    b3.setAttribute('aria-pressed', String(three));
+    b2.setAttribute('aria-pressed', String(!three));
+    try { localStorage.setItem('sleepsheeps.style', three ? '3d' : '2d'); } catch (e) {}
+  }
+  b2.addEventListener('click', () => setStyle(false));
+  b3.addEventListener('click', () => setStyle(true));
+  setStyle(is3D);
+
+  // ---------- double-tap the moon to reset ----------
+  let lastTap = 0;
+  cv.addEventListener('pointerup', (e) => {
+    const dx = e.clientX - moonGeom.cx, dy = e.clientY - moonGeom.cy;
+    if (Math.hypot(dx, dy) > moonGeom.R * 1.15) { lastTap = 0; return; }
+    const now = performance.now();
+    if (now - lastTap < 400) {
+      lastTap = 0;
+      count = 0;
+      resetFlash = 1;
+      saveCount();
+    } else {
+      lastTap = now;
+    }
+  });
+  cv.addEventListener('dblclick', (e) => e.preventDefault());
 
   // ---------- exit ----------
   const gn = document.getElementById('goodnight');
