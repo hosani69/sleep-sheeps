@@ -65,26 +65,7 @@
   .exit:focus-visible { outline: 2px solid var(--moon); outline-offset: 3px; }
   .exit svg { width: 20px; height: 20px; }
 
-  .style-switch {
-    position: fixed;
-    top: calc(env(safe-area-inset-top, 0px) + 14px);
-    right: calc(env(safe-area-inset-right, 0px) + 14px);
-    z-index: 5;
-    display: inline-flex; padding: 3px; gap: 2px;
-    border-radius: 999px;
-    border: 1px solid var(--glass-edge);
-    background: var(--glass);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-  }
-  .style-switch button {
-    min-width: 44px; height: 36px; padding: 0 12px;
-    border: 0; border-radius: 999px; cursor: pointer;
-    background: transparent; color: var(--wool); opacity: .7;
-    font: 600 15px/1 var(--font-round); letter-spacing: 0.04em;
-  }
-  .style-switch button[aria-pressed="true"] { background: var(--moon); color: var(--ink); opacity: 1; }
-  .style-switch button:focus-visible { outline: 2px solid var(--moon); outline-offset: 2px; }
+
 
   .rotate {
     position: fixed; left: 50%; transform: translateX(-50%);
@@ -120,16 +101,12 @@
 </style>
 
 </head><body>
-<canvas id="sky" aria-label="Sheep jumping over a fence under a starry sky. The moon shows how many have jumped. Double-tap the moon to reset the count."></canvas>
+<canvas id="sky" aria-label="Sheep jumping over a fence under a starry sky. The moon shows how many have jumped. Double-tap the moon to reset the count. Drag to look around."></canvas>
 
 <button class="exit" id="exit" type="button" aria-label="Exit app">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
 </button>
 
-<div class="style-switch" role="group" aria-label="Art style">
-  <button type="button" id="mode-2d" aria-pressed="false">2D</button>
-  <button type="button" id="mode-3d" aria-pressed="true">3D</button>
-</div>
 
 <div class="toast" id="toast" role="status">Counter reset</div>
 
@@ -158,7 +135,6 @@
   let count = 0, moonPop = 0, lastJump = -99, clock = 0;
   let celebrate = 0, resetFlash = 0;
   let is3D = true;
-  try { if (localStorage.getItem('sleepsheeps.style') === '2d') is3D = false; } catch (e) {}
 
   try { const c = parseInt(localStorage.getItem('sleepsheeps.count'), 10); if (c >= 0 && c <= MAX_COUNT) count = c; } catch (e) {}
   const saveCount = () => { try { localStorage.setItem('sleepsheeps.count', String(count)); } catch (e) {} };
@@ -791,7 +767,7 @@
     for (const o of front) drawSheep(o.sh, t);
   }
 
-  // ---------- 3D mode: real 3D models with tilt (gyroscope) parallax ----------
+  // ---------- 3D scene: real 3D models; dragging moves the view to show depth ----------
   // Built with three.js. The same sheep simulation drives both modes: the 2D lap path
   // is mapped onto the ground plane, front lane at z = 0 and the return lane further back.
   function create3D() {
@@ -814,7 +790,7 @@
     scene.fog = new T.FogExp2(0x0d1638, 0.018);
     const camera = new T.PerspectiveCamera(38, 1, 0.1, 400);
     const WORLD_W = 16, DEPTH = 5.2;
-    const target = new T.Vector3(0, 1.5, -1.5);
+    const target = new T.Vector3(0, 2.3, -1.5);
     const camBase = new T.Vector3(0, 2.5, 10.5);
 
     // sky backdrop
@@ -859,7 +835,7 @@
     });
 
     // moon: lit sphere with craters, a glow sprite, and the count floating in front
-    const MOON_POS = new T.Vector3(0, 8.4, -36), MOON_R = 3.9;
+    const MOON_POS = new T.Vector3(0, 11.6, -36), MOON_R = 3.3;
     const mc = document.createElement('canvas'); mc.width = 1024; mc.height = 512;
     const mx = mc.getContext('2d');
     mx.fillStyle = '#fff1c8'; mx.fillRect(0, 0, 1024, 512);
@@ -927,7 +903,7 @@
     const hillMat = [0x162350, 0x1b3150, 0x13204a].map(c => new T.MeshStandardMaterial({ color: c, roughness: 1 }));
     [[-20, -34, 16, 5, 0], [6, -42, 22, 7, 2], [26, -30, 14, 4.5, 1], [-6, -26, 12, 3.2, 1], [16, -22, 10, 2.6, 0]].forEach(([x, z, r, h, m]) => {
       const hill = new T.Mesh(new T.SphereGeometry(1, 32, 16), hillMat[m]);
-      hill.scale.set(r, h, r * 0.55); hill.position.set(x, -0.3, z); hill.receiveShadow = true;
+      hill.scale.set(r, h * 0.6, r * 0.55); hill.position.set(x, -0.3, z); hill.receiveShadow = true;
       scene.add(hill);
     });
     {
@@ -980,7 +956,112 @@
       const m = new T.Mesh(ballG, mat); m.scale.set(r * sx, r * sy, r * sz); m.position.set(x, y, z); return m;
     }
 
-    function makeSheep(sh) {
+    // ---- headwear from around the world, one per sheep (head-local units, front is +x) ----
+    const mat = (c, extra) => new T.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.85 }, extra || {}));
+    function patternTex(draw, w = 128, h = 128, rep = 1) {
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      draw(c.getContext('2d'), w, h);
+      const tx = new T.CanvasTexture(c); tx.wrapS = tx.wrapT = T.RepeatWrapping; tx.repeat.set(rep, rep);
+      return tx;
+    }
+    const shemaghTex = patternTex((g, w, h) => {
+      g.fillStyle = '#f4f1ea'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#c0262d';
+      for (let i = 0; i < 8; i++) { g.fillRect(i * 16 + 4, 0, 6, h); g.fillRect(0, i * 16 + 4, w, 6); }
+    }, 128, 128, 3);
+    const tartanTex = patternTex((g, w, h) => {
+      g.fillStyle = '#b3202a'; g.fillRect(0, 0, w, h);
+      g.fillStyle = 'rgba(20,60,40,0.75)'; for (let i = 0; i < 4; i++) { g.fillRect(i * 32, 0, 12, h); g.fillRect(0, i * 32, w, 12); }
+      g.fillStyle = 'rgba(240,210,90,0.8)'; for (let i = 0; i < 4; i++) { g.fillRect(i * 32 + 22, 0, 2, h); g.fillRect(0, i * 32 + 22, w, 2); }
+    }, 128, 128, 2);
+    const chulloTex = patternTex((g, w, h) => {
+      const cols = ['#d6304a', '#f2b632', '#2d8bba', '#f4f1ea', '#3b8a3a', '#7a2f8f'];
+      for (let i = 0; i < 8; i++) { g.fillStyle = cols[i % cols.length]; g.fillRect(0, i * h / 8, w, h / 8); }
+      g.fillStyle = '#f4f1ea';
+      for (let x = 0; x < w; x += 16) { g.beginPath(); g.moveTo(x, h * 0.5); g.lineTo(x + 8, h * 0.44); g.lineTo(x + 16, h * 0.5); g.lineTo(x + 8, h * 0.56); g.fill(); }
+    }, 128, 128, 1);
+    const halfSphere = (r, m) => new T.Mesh(new T.SphereGeometry(r, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), m);
+    const lathe = (pts, m) => new T.Mesh(new T.LatheGeometry(pts.map(([x, y]) => new T.Vector2(x, y)), 40), m);
+
+    const HATS = [
+      { name: 'Arab shemagh and agal', make(h) {
+        const cloth = mat(0xffffff, { map: shemaghTex, side: T.DoubleSide });
+        const cap = halfSphere(0.25, cloth); cap.scale.set(1.05, 0.95, 1.05); cap.position.y = 0.02; h.add(cap);
+        const drape = new T.Mesh(new T.CylinderGeometry(0.255, 0.33, 0.36, 28, 1, true, 0.85 * Math.PI, 1.3 * Math.PI), cloth);
+        drape.position.y = -0.15; h.add(drape);
+        const agal = new T.Mesh(new T.TorusGeometry(0.2, 0.028, 10, 32), mat(0x15161c)); agal.rotation.x = Math.PI / 2; agal.position.y = 0.15; h.add(agal);
+        const agal2 = agal.clone(); agal2.position.y = 0.11; agal2.scale.setScalar(1.06); h.add(agal2);
+        return { hideEars: true };
+      } },
+      { name: 'Vietnamese non la', make(h) {
+        const straw = mat(0xe8d6a3, { side: T.DoubleSide });
+        const cone = new T.Mesh(new T.ConeGeometry(0.46, 0.24, 36, 1, true), straw); cone.position.y = 0.27; h.add(cone);
+        const rim = new T.Mesh(new T.TorusGeometry(0.46, 0.012, 6, 40), mat(0xc9b27a)); rim.rotation.x = Math.PI / 2; rim.position.y = 0.15; h.add(rim);
+        const strap = new T.Mesh(new T.TorusGeometry(0.2, 0.01, 6, 24, Math.PI), mat(0x6d4fa0)); strap.rotation.set(0, Math.PI / 2, Math.PI); strap.position.set(0.05, 0.12, 0); h.add(strap);
+      } },
+      { name: 'US cowboy hat', make(h) {
+        const felt = mat(0x8a5a32);
+        const brim = lathe([[0.15, 0], [0.3, -0.005], [0.38, 0.02], [0.41, 0.07]], Object.assign(felt.clone(), { side: T.DoubleSide }));
+        brim.position.y = 0.13; brim.scale.z = 0.8; h.add(brim);
+        const crown = new T.Mesh(new T.CylinderGeometry(0.15, 0.19, 0.22, 24), felt); crown.position.y = 0.25; h.add(crown);
+        const dent = new T.Mesh(new T.SphereGeometry(0.12, 16, 8), mat(0x6e4626)); dent.scale.set(1, 0.25, 0.5); dent.position.y = 0.36; h.add(dent);
+        const band = new T.Mesh(new T.CylinderGeometry(0.188, 0.19, 0.04, 24, 1, true), mat(0x2b1c12)); band.position.y = 0.17; h.add(band);
+      } },
+      { name: 'Indian turban', make(h) {
+        const cloth = mat(0xf09a1c);
+        [[0.2, 0.085, 0.06, 0], [0.19, 0.08, 0.14, 0.25], [0.16, 0.075, 0.21, -0.2], [0.11, 0.07, 0.27, 0.15]].forEach(([r, tube, y, tilt]) => {
+          const t = new T.Mesh(new T.TorusGeometry(r, tube, 12, 32), cloth); t.rotation.set(Math.PI / 2 + tilt * 0.3, tilt * 0.2, 0); t.position.y = y; h.add(t);
+        });
+        const top = new T.Mesh(new T.SphereGeometry(0.12, 16, 10), cloth); top.position.y = 0.27; top.scale.y = 0.7; h.add(top);
+        const jewel = new T.Mesh(new T.SphereGeometry(0.035, 12, 8), mat(0xd23a5a, { roughness: 0.2, metalness: 0.3 })); jewel.position.set(0.25, 0.15, 0); h.add(jewel);
+        const plume = new T.Mesh(new T.ConeGeometry(0.03, 0.18, 8), mat(0xffffff)); plume.position.set(0.22, 0.27, 0); plume.rotation.z = -0.4; h.add(plume);
+        return { hideEars: true };
+      } },
+      { name: 'Mexican sombrero', make(h) {
+        const straw = mat(0xd9b26a, { side: T.DoubleSide });
+        const brim = lathe([[0.15, 0], [0.4, -0.01], [0.52, 0.04], [0.56, 0.11]], straw); brim.position.y = 0.13; h.add(brim);
+        const crown = new T.Mesh(new T.CylinderGeometry(0.11, 0.17, 0.3, 24), straw); crown.position.y = 0.28; h.add(crown);
+        const top = new T.Mesh(new T.SphereGeometry(0.11, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), straw); top.position.y = 0.43; top.scale.y = 0.5; h.add(top);
+        [[0x1f8a4c, 0.18], [0xd6304a, 0.22]].forEach(([c, y]) => { const b = new T.Mesh(new T.CylinderGeometry(0.16 - (y - 0.18) * 0.2, 0.165 - (y - 0.18) * 0.2, 0.035, 24, 1, true), mat(c)); b.position.y = y; h.add(b); });
+        const edge = new T.Mesh(new T.TorusGeometry(0.56, 0.015, 6, 48), mat(0xd6304a)); edge.rotation.x = Math.PI / 2; edge.position.y = 0.24; h.add(edge);
+      } },
+      { name: 'Scottish tam o’shanter', make(h) {
+        const tam = new T.Mesh(new T.SphereGeometry(0.28, 24, 14), mat(0xffffff, { map: tartanTex })); tam.scale.set(1, 0.38, 1); tam.position.set(-0.02, 0.2, 0); tam.rotation.z = 0.15; h.add(tam);
+        const band = new T.Mesh(new T.TorusGeometry(0.18, 0.03, 8, 28), mat(0x1d2f4a)); band.rotation.x = Math.PI / 2; band.position.y = 0.14; h.add(band);
+        const pom = new T.Mesh(new T.SphereGeometry(0.065, 12, 10), mat(0xc91f2f, { roughness: 1 })); pom.position.set(-0.04, 0.32, 0); h.add(pom);
+      } },
+      { name: 'Turkish fez', make(h) {
+        const fez = new T.Mesh(new T.CylinderGeometry(0.12, 0.16, 0.22, 24), mat(0xb3202a)); fez.position.y = 0.24; fez.rotation.z = 0.08; h.add(fez);
+        const cord = new T.Mesh(new T.CylinderGeometry(0.008, 0.008, 0.2, 6), mat(0x111111)); cord.position.set(-0.1, 0.3, 0.06); cord.rotation.z = 0.9; h.add(cord);
+        const tassel = new T.Mesh(new T.ConeGeometry(0.035, 0.1, 10), mat(0x111111)); tassel.position.set(-0.17, 0.22, 0.08); h.add(tassel);
+      } },
+      { name: 'Russian ushanka', make(h) {
+        const fur = mat(0x6e6258, { roughness: 1 });
+        const dome = halfSphere(0.25, fur); dome.position.y = 0.05; dome.scale.y = 0.95; h.add(dome);
+        const front = new T.Mesh(new T.BoxGeometry(0.1, 0.13, 0.46), fur); front.position.set(0.21, 0.13, 0); front.rotation.z = -0.25; h.add(front);
+        for (const s of [1, -1]) { const flap = new T.Mesh(new T.BoxGeometry(0.2, 0.26, 0.07), fur); flap.position.set(-0.02, -0.06, 0.24 * s); flap.rotation.x = -0.2 * s; h.add(flap); }
+        const star = new T.Mesh(new T.CircleGeometry(0.035, 5), mat(0xd4b04a, { metalness: 0.5, roughness: 0.3 })); star.position.set(0.27, 0.15, 0); star.rotation.y = Math.PI / 2; h.add(star);
+        return { hideEars: true };
+      } },
+      { name: 'Andean chullo', make(h) {
+        const knit = mat(0xffffff, { map: chulloTex, roughness: 1 });
+        const dome = halfSphere(0.245, knit); dome.position.y = 0.03; dome.scale.y = 1.15; h.add(dome);
+        for (const s of [1, -1]) {
+          const flap = new T.Mesh(new T.ConeGeometry(0.09, 0.26, 12), knit); flap.position.set(-0.02, -0.08, 0.22 * s); flap.rotation.x = Math.PI; h.add(flap);
+          const tie = new T.Mesh(new T.SphereGeometry(0.03, 8, 6), mat(0xf2b632)); tie.position.set(-0.02, -0.24, 0.22 * s); h.add(tie);
+        }
+        const pom = new T.Mesh(new T.SphereGeometry(0.06, 12, 10), mat(0xd6304a, { roughness: 1 })); pom.position.y = 0.33; h.add(pom);
+        return { hideEars: true };
+      } },
+      { name: 'Japanese hachimaki', make(h) {
+        const band = new T.Mesh(new T.TorusGeometry(0.215, 0.035, 8, 36), mat(0xf6f4ef)); band.rotation.x = Math.PI / 2; band.scale.set(1.04, 0.86, 1.6); band.position.y = 0.04; h.add(band);
+        const sun = new T.Mesh(new T.CircleGeometry(0.04, 20), mat(0xc8102e)); sun.position.set(0.235, 0.045, 0); sun.rotation.y = Math.PI / 2; h.add(sun);
+        for (const s of [1, -1]) { const tail = new T.Mesh(new T.BoxGeometry(0.16, 0.04, 0.012), mat(0xf6f4ef)); tail.position.set(-0.29, 0.0 - 0.03 * (s + 1), 0.03 * s); tail.rotation.set(0.3 * s, 0, -0.6 - 0.25 * s); h.add(tail); }
+        return { keepTuft: true };
+      } },
+    ];
+
+    function makeSheep(sh, idx) {
       const root = new T.Group();      // placed on the path, turned to face travel
       const pivot = new T.Group();     // rotates around the body centre for poses
       pivot.position.y = 0.78;
@@ -1007,7 +1088,12 @@
         const ear = ballMesh(darkMat, 0.13, -0.1, 0.06, 0.17 * s, 1, 0.42, 0.6);
         ear.rotation.set(0.5 * s, 0, 0.6); head.add(ear); ears.push(ear);
       }
-      head.add(ballMesh(wm, 0.11, -0.04, 0.17, 0.03), ballMesh(wm, 0.09, 0.07, 0.18, -0.04));
+      const hatSpec = HATS[idx % HATS.length];
+      const hat = new T.Group(); hat.name = hatSpec.name;
+      const hatOpts = hatSpec.make(hat) || {};
+      head.add(hat);
+      if (hatOpts.keepTuft) head.add(ballMesh(wm, 0.11, -0.04, 0.17, 0.03), ballMesh(wm, 0.09, 0.07, 0.18, -0.04));
+      if (hatOpts.hideEars) ears.forEach(e => { e.visible = false; });
       const eyes = [];
       for (const s of [1, -1]) {
         const eye = ballMesh(eyeMat, 0.05, 0.1, 0.03, 0.135 * s);
@@ -1043,41 +1129,17 @@
       camera.updateProjectionMatrix();
     }
 
-    // tilt input: gyroscope first, then drag / mouse, else a slow idle sway
-    const tilt = { x: 0, y: 0, tx: 0, ty: 0, src: 'idle', base: null, lastInput: 0 };
-    function onOrient(e) {
-      if (e.beta == null || e.gamma == null) return;
-      const ang = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : (window.orientation || 0);
-      let x, y;
-      if (ang === 90) { x = e.beta; y = -e.gamma; }
-      else if (ang === 270 || ang === -90) { x = -e.beta; y = e.gamma; }
-      else { x = e.gamma; y = e.beta; }
-      if (!tilt.base) tilt.base = { x, y };
-      // let the resting position drift slowly so the view re-centres on how the phone is held
-      tilt.base.x += (x - tilt.base.x) * 0.004;
-      tilt.base.y += (y - tilt.base.y) * 0.004;
-      tilt.tx = Math.max(-1, Math.min(1, (x - tilt.base.x) / 20));
-      tilt.ty = Math.max(-1, Math.min(1, (y - tilt.base.y) / 20));
-      tilt.src = 'gyro'; tilt.lastInput = performance.now();
-    }
-    window.addEventListener('deviceorientation', onOrient);
-    async function askMotion() {
-      try {
-        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-          await DeviceOrientationEvent.requestPermission();
-        }
-      } catch (e) {}
-    }
+    // touch / mouse drag moves the view; the scene keeps the angle you leave it at
+    const tilt = { x: 0, y: 0, tx: 0, ty: 0 };
     let drag = null;
     el.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, tx: tilt.tx, ty: tilt.ty }; });
     window.addEventListener('pointerup', () => { drag = null; });
     window.addEventListener('pointermove', e => {
-      if (el.hidden || tilt.src === 'gyro') return;
+      if (el.hidden) return;
       if (drag) {
         tilt.tx = Math.max(-1, Math.min(1, drag.tx + (e.clientX - drag.x) / (W * 0.35)));
         tilt.ty = Math.max(-1, Math.min(1, drag.ty + (e.clientY - drag.y) / (H * 0.35)));
-      } else return;
-      tilt.src = 'pointer'; tilt.lastInput = performance.now();
+      }
     });
 
     const tmpV = new T.Vector3(), tmpE = new T.Vector3();
@@ -1088,12 +1150,9 @@
       if (count !== shownCount) paintCount();
 
       // tilt → camera offset (near things shift more than far ones: depth)
-      if (performance.now() - tilt.lastInput > 4000 && tilt.src !== 'gyro') {
-        tilt.tx = Math.sin(t * 0.21) * 0.35; tilt.ty = Math.sin(t * 0.13) * 0.2;
-      }
       tilt.x += (tilt.tx - tilt.x) * Math.min(1, dt * 5);
       tilt.y += (tilt.ty - tilt.y) * Math.min(1, dt * 5);
-      camera.position.set(camBase.x + tilt.x * 2.6, camBase.y - tilt.y * 0.9, camBase.z);
+      camera.position.set(camBase.x + tilt.x * 2.6, camBase.y - tilt.y * 0.6, camBase.z);
       camera.lookAt(target);
 
       // stars twinkle by layer
@@ -1146,7 +1205,7 @@
     }
 
     return {
-      el, render, askMotion,
+      el, render,
       show(on) { el.hidden = !on; cv.hidden = on; if (on) resize3(); },
     };
   }
@@ -1191,24 +1250,17 @@
   keepAwake();
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && running) keepAwake(); });
 
-  // ---------- art style ----------
-  const b2 = document.getElementById('mode-2d'), b3 = document.getElementById('mode-3d');
-  function setStyle(three) {
-    is3D = three;
-    b3.setAttribute('aria-pressed', String(three));
-    b2.setAttribute('aria-pressed', String(!three));
-    try { localStorage.setItem('sleepsheeps.style', three ? '3d' : '2d'); } catch (e) {}
-    if (scene3) scene3.show(three);
-  }
+  // ---------- 3D scene (falls back to the canvas drawing without WebGL) ----------
   const scene3 = three;
-  b2.addEventListener('click', () => setStyle(false));
-  b3.addEventListener('click', () => { if (scene3) scene3.askMotion(); setStyle(true); });
-  setStyle(is3D);
+  if (scene3) scene3.show(true);
 
   // ---------- double-tap the moon to reset ----------
   let lastTap = 0, toastTimer = 0;
   const toast = document.getElementById('toast');
+  let down = null;
+  function onDown(e) { down = { x: e.clientX, y: e.clientY }; }
   function onTap(e) {
+    if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 12) { lastTap = 0; return; }
     const dx = e.clientX - moonGeom.cx, dy = e.clientY - moonGeom.cy;
     if (Math.hypot(dx, dy) > moonGeom.R * 1.15) { lastTap = 0; return; }
     const now = performance.now();
@@ -1224,8 +1276,9 @@
       lastTap = now;
     }
   }
+  cv.addEventListener('pointerdown', onDown);
   cv.addEventListener('pointerup', onTap);
-  if (scene3) scene3.el.addEventListener('pointerup', onTap);
+  if (scene3) { scene3.el.addEventListener('pointerdown', onDown); scene3.el.addEventListener('pointerup', onTap); }
   cv.addEventListener('dblclick', (e) => e.preventDefault());
 
   // ---------- exit ----------
