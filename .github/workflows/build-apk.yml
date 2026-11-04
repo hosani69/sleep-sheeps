@@ -3,6 +3,7 @@ name: Build APK
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -27,6 +28,7 @@ jobs:
           name: SleepSheeps-apk
           path: SleepSheeps.apk
       - name: Publish to the "latest" release
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
